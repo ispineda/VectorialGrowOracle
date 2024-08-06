@@ -11,8 +11,8 @@ class VectorialGrowOracle:
         self.sid = sid
         self.user = user
         self.connection_available = False
-        self.path_create = 'CREAR.sql'
-        self.path_delete = 'ELIMINAR.sql'
+        self.path_create = 'CREATE.sql'
+        self.path_delete = 'DELETE.sql'
 
         try:
             self.dsn = cx_Oracle.makedsn(self.host, self.port, self.sid)
