@@ -1,5 +1,4 @@
 import cx_Oracle
-import numpy as np
 import os
 
 class VectorialGrowOracle:
@@ -13,12 +12,14 @@ class VectorialGrowOracle:
         self.connection_available = False
         self.path_create = 'CREATE.sql'
         self.path_delete = 'DELETE.sql'
+        self.path_package = 'PACKAGE.sql'
 
         try:
             self.dsn = cx_Oracle.makedsn(self.host, self.port, self.sid)
             self.connection = cx_Oracle.connect(user = self.user, password = password, dsn= self.dsn)
             self.cursor = self.connection.cursor()
             self.sql_run_path(self.path_create)
+            self.sql_run_path(self.path_package)
             self.connection_available = True
 
         except cx_Oracle.DatabaseError as e:
@@ -120,16 +121,3 @@ class VectorialGrowOracle:
         self.cursor.close()
         self.connection.close()
 
-if __name__ == "__main__":
-    bdVectorial = VectorialGrowOracle( host='localhost',
-                                    port="1521",
-                                    sid='CURSO',
-                                    user="HR",
-                                    password='HR')
-
-    ##bdVectorial.create_collection('Armando',137,'cosines')
-    ##bdVectorial.delete_collection('Armando')
-    ##bdVectorial.end_connection()
-    ##bdVectorial.delete_all()
-    # Configura la conexión a la base de datos
-    
