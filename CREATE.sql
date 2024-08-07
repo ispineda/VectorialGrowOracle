@@ -17,7 +17,7 @@ BEGIN
     CREATE TABLE T_DATA_VECTOR(
         id_data_vector  NUMBER GENERATED ALWAYS AS IDENTITY,
         id_collection   NUMBER,
-        description     VARCHAR2(4000),
+        description     CLOB,
         vector_name     VARCHAR2(100),
         creation_date   DATE DEFAULT SYSDATE,
         tags            CLOB,

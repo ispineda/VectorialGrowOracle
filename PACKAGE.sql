@@ -20,11 +20,43 @@ CREATE OR REPLACE PACKAGE DBVECTORIAL IS
         P_SEARCH_METHOD OUT VARCHAR2,
         P_CREATION_DATE OUT DATE
     );
-    
 END DBVECTORIAL;
 /--split
 CREATE OR REPLACE PACKAGE BODY DBVECTORIAL IS 
-    
+    PROCEDURE ADD_VECTOR(
+        p_name_collection IN VARCHAR2,
+        p_description IN CLOB,
+        p_vector_name IN VARCHAR2,
+        p_tags        IN CLOB,
+        p_parameters  IN CLOB,
+        p_vector      IN BLOB
+    )
+    IS
+        v_id_collection NUMBER;
+        v_sql_insert VARCHAR2(32767);
+    BEGIN
+        SELECT ID_COLLECTION INTO V_ID_COLLECTION 
+        FROM T_COLLECTION WHERE 
+        NAME_COLLECTION = P_NAME_COLLECTION;
+        
+        v_sql_insert:='
+        INSERT INTO t_data_vector (
+            id_collection,
+            description,
+            vector_name,
+            tags,
+            parameters,
+            vector
+        ) VALUES (:v0, :v1, :v2, :v3, :v4,:v5
+        )';
+        
+        EXECUTE IMMEDIATE v_sql_insert USING id_collection, p_description, p_vector_name, p_tags, p_parameters, p_vector;
+        COMMIT;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            DBMS_OUTPUT.PUT_LINE('Identificador no encontrado');
+    END;
+
     PROCEDURE CREATE_COLLECTION(
         P_NAME_COLLECTION IN VARCHAR2,
         P_LEN_VECTOR IN NUMBER, 

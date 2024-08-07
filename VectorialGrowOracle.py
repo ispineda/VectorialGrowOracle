@@ -29,7 +29,6 @@ class VectorialGrowOracle:
 
         path_general = os.path.dirname(os.path.abspath(__file__))
         file_path = os.path.join(path_general, file_path)
-        print(file_path)
         
         with open(file_path, 'r') as file:
             sql_script = file.read()
