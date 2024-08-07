@@ -4,6 +4,23 @@ CREATE OR REPLACE PACKAGE DBVECTORIAL IS
     TYPE T_BINARY_DOUBLE IS
         TABLE OF BINARY_DOUBLE;
     
+    FUNCTION SIMILITARY_COSINES_LIST (
+        V1 BLOB, 
+        V2 BLOB
+    ) RETURN NUMBER;
+    
+    FUNCTION EUCLIDIAN_DISTANCE_LIST (
+        V1 BLOB, 
+        V2 BLOB
+    ) RETURN NUMBER; 
+    
+    PROCEDURE SAVE_VECTOR(
+        P_NAME_COLLECTION IN VARCHAR2,
+        P_DESCRIPTION IN CLOB,
+        P_TAGS        IN CLOB,
+        P_VECTOR      IN BLOB
+    );
+    
     PROCEDURE CREATE_COLLECTION(
         P_NAME_COLLECTION IN VARCHAR2,
         P_LEN_VECTOR IN NUMBER, 
@@ -20,15 +37,14 @@ CREATE OR REPLACE PACKAGE DBVECTORIAL IS
         P_SEARCH_METHOD OUT VARCHAR2,
         P_CREATION_DATE OUT DATE
     );
+    
 END DBVECTORIAL;
 /--split
 CREATE OR REPLACE PACKAGE BODY DBVECTORIAL IS 
-    PROCEDURE ADD_VECTOR(
+    PROCEDURE SAVE_VECTOR(
         p_name_collection IN VARCHAR2,
         p_description IN CLOB,
-        p_vector_name IN VARCHAR2,
         p_tags        IN CLOB,
-        p_parameters  IN CLOB,
         p_vector      IN BLOB
     )
     IS
@@ -43,14 +59,11 @@ CREATE OR REPLACE PACKAGE BODY DBVECTORIAL IS
         INSERT INTO t_data_vector (
             id_collection,
             description,
-            vector_name,
             tags,
-            parameters,
             vector
-        ) VALUES (:v0, :v1, :v2, :v3, :v4,:v5
-        )';
+        ) VALUES (:v0, :v1, :v2, :v3 )';
         
-        EXECUTE IMMEDIATE v_sql_insert USING id_collection, p_description, p_vector_name, p_tags, p_parameters, p_vector;
+        EXECUTE IMMEDIATE v_sql_insert USING v_id_collection, p_description, p_tags, p_vector;
         COMMIT;
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
@@ -141,8 +154,8 @@ CREATE OR REPLACE PACKAGE BODY DBVECTORIAL IS
         LEN_V1 NUMBER;
         LEN_V2 NUMBER;
         
-        BUFFER_V1 RAW(32767);
-        BUFFER_V2  RAW(32767);
+        BUFFER_V1   RAW(32767);
+        BUFFER_V2   RAW(32767);
         
         AMOUNT INTEGER := 32767;
         OFFSET INTEGER := 1;
@@ -319,13 +332,14 @@ CREATE OR REPLACE PACKAGE BODY DBVECTORIAL IS
         LOOP
             EXIT WHEN OFFSET > BLOB_LEN_V1;
             DBMS_LOB.READ(V1, AMOUNT, OFFSET, BUFFER_V1);
+            
             FOR I IN 0..LEN_V1 - 1 LOOP
                 FRAGMENT_V1 := UTL_RAW.CAST_TO_BINARY_DOUBLE(DBMS_LOB.SUBSTR(BUFFER_V1, BASE, I * BASE + 1));
 
                 RESULT.EXTEND;
                 RESULT(RESULT.LAST) := FRAGMENT_V1;
+                
             END LOOP;
-
             OFFSET := OFFSET + AMOUNT;
         END LOOP;
 

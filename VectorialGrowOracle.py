@@ -1,5 +1,6 @@
 import cx_Oracle
 import os
+import numpy as np
 
 class VectorialGrowOracle:
     
@@ -45,10 +46,10 @@ class VectorialGrowOracle:
 
     def get_data_connection(self):
         print(f'''
-        host: {self.host},
-        port: {self.port},
-        sid: {self.sid},
-        user: {self.user}
+        host:   {self.host},
+        port:   {self.port},
+        sid:    {self.sid},
+        user:   {self.user}
         conexión disponible: {self.connection_available}
         ''')
         return (self.host,self.port,self.sid, self.user)
@@ -120,3 +121,30 @@ class VectorialGrowOracle:
         self.cursor.close()
         self.connection.close()
 
+    def add_vector(self, name_collection, tags, description, vector):
+
+        if not self.get_collection_details(name_collection) is None:
+            
+            tags_str = np.array2string(tags, separator=',')
+
+            tags_clob = self.cursor.var(cx_Oracle.CLOB)
+            tags_clob.setvalue(0,tags_str)
+
+            description_clob = self.cursor.var(cx_Oracle.CLOB)
+            description_clob.setvalue(0,description)
+
+            vector_bytes = vector.byteswap().tobytes()
+
+            vector_blob = self.cursor.var(cx_Oracle.BLOB)
+            vector_blob.setvalue(0,vector_bytes)
+
+            self.cursor.callproc('DBVECTORIAL.SAVE_VECTOR', [
+                        name_collection,
+                        description_clob,
+                        tags_clob,
+                        vector_blob
+                    ])
+        else:
+            print('No se cuenta con una coleccion con dicho nombre')
+    
+    

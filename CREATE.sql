@@ -17,12 +17,10 @@ BEGIN
     CREATE TABLE T_DATA_VECTOR(
         id_data_vector  NUMBER GENERATED ALWAYS AS IDENTITY,
         id_collection   NUMBER,
-        description     CLOB,
-        vector_name     VARCHAR2(100),
-        creation_date   DATE DEFAULT SYSDATE,
         tags            CLOB,
-        parameters      CLOB,
-        vector          BLOB
+        description     CLOB,
+        vector          BLOB,
+        creation_date   DATE DEFAULT SYSDATE
     )';
     SELECT
         COUNT(*)
