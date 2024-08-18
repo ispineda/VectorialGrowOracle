@@ -1,430 +1,152 @@
--- PAQUETE PARA ADMINISTRAR BASE VECTORIAL
-CREATE OR REPLACE PACKAGE DBVECTORIAL IS
-   
-    TYPE T_BINARY_DOUBLE IS
-        TABLE OF BINARY_DOUBLE;
-    
-    FUNCTION SIMILITARY_COSINES_LIST (
-        V1 BLOB, 
-        V2 BLOB
-    ) RETURN NUMBER;
-    
-    FUNCTION EUCLIDIAN_DISTANCE_LIST (
-        V1 BLOB, 
-        V2 BLOB
-    ) RETURN NUMBER; 
-    
-    PROCEDURE SAVE_VECTOR(
-        P_NAME_COLLECTION IN VARCHAR2,
-        P_DESCRIPTION IN CLOB,
-        P_TAGS        IN CLOB,
-        P_VECTOR      IN BLOB
+CREATE OR REPLACE PACKAGE DBVECTORIAL
+IS
+    PROCEDURE SEARCH_VECTOR(
+        P_NAME_COLLECT IN VARCHAR2,
+        P_V1 IN V_BINARY_DOUBLE,
+        P_ROWS IN NUMBER,
+        C1 OUT SYS_REFCURSOR
     );
-    
-    PROCEDURE CREATE_COLLECTION(
-        P_NAME_COLLECTION IN VARCHAR2,
-        P_LEN_VECTOR IN NUMBER, 
-        P_SEARCH_METHOD IN VARCHAR2
-    );
-    
-    PROCEDURE DELETE_COLLECTION(
-        P_NAME_COLLECTION IN VARCHAR2 
-    );
-    
-    PROCEDURE GET_COLLECTION_DETAILS (
-        P_NAME_COLLECTION IN VARCHAR2,
-        P_LEN_VECTOR OUT NUMBER,
-        P_SEARCH_METHOD OUT VARCHAR2,
-        P_CREATION_DATE OUT DATE
-    );
-    
 END DBVECTORIAL;
 /--split
-CREATE OR REPLACE PACKAGE BODY DBVECTORIAL IS 
-    PROCEDURE SAVE_VECTOR(
-        p_name_collection IN VARCHAR2,
-        p_description IN CLOB,
-        p_tags        IN CLOB,
-        p_vector      IN BLOB
-    )
-    IS
-        v_id_collection NUMBER;
-        v_sql_insert VARCHAR2(32767);
+CREATE OR REPLACE PACKAGE BODY DBVECTORIAL
+IS
+    PROCEDURE SEARCH_VECTOR(
+        P_NAME_COLLECT IN VARCHAR2,
+        P_V1 IN V_BINARY_DOUBLE,
+        P_ROWS IN NUMBER,
+        C1 OUT SYS_REFCURSOR
+    ) IS
+        V_ORDER T_SIMILITARY_METHODS.SORT_ORDER%TYPE;
+        V_METHOD T_SIMILITARY_METHODS.NAME_METHOD%TYPE;
+        V_SQL_SEARCH CLOB;
     BEGIN
-        SELECT ID_COLLECTION INTO V_ID_COLLECTION 
-        FROM T_COLLECTION WHERE 
-        NAME_COLLECTION = P_NAME_COLLECTION;
+    
+        V_SQL_SEARCH:='
+            SELECT 
+                TDV.TAGS,
+                TDV.DESCRIPTION,
+                TDV.VECTOR,
+                TDV.CREATION_DATE,
+                DBVECTORIAL.#METHOD#(
+                    :V1,
+                    TDV.VECTOR
+                ) AS SIMILITARY
+            FROM 
+                T_DATA_VECTOR TDV, 
+                T_COLLECTION TC 
+            WHERE 
+                TC.ID_COLLECTION = TDV.COLLECTION_ID 
+                AND TC.NAME_COLLECTION = ''#NAME#''
+            ORDER BY SIMILITARY #ORDER#
+            FETCH FIRST #ROWS# ROWS ONLY
+        ';
+        SELECT
+            TSM.NAME_METHOD,
+            TSM.SORT_ORDER 
+        INTO
+            V_METHOD,
+            V_ORDER
+        FROM 
+            T_SIMILITARY_METHODS TSM,
+            T_COLLECTION TC
+        WHERE 
+            TSM.ID_METHOD = TC.SEARCH_METHOD_ID AND
+            TC.NAME_COLLECTION = P_NAME_COLLECT;
         
-        v_sql_insert:='
-        INSERT INTO t_data_vector (
-            id_collection,
-            description,
-            tags,
-            vector
-        ) VALUES (:v0, :v1, :v2, :v3 )';
+        V_SQL_SEARCH := REPLACE(V_SQL_SEARCH, '#NAME#', P_NAME_COLLECT);
+        V_SQL_SEARCH := REPLACE(V_SQL_SEARCH, '#METHOD#', V_METHOD);
+        V_SQL_SEARCH := REPLACE(V_SQL_SEARCH, '#ORDER#', V_ORDER);
+        V_SQL_SEARCH := REPLACE(V_SQL_SEARCH, '#ROWS#', P_ROWS);
+    
+        DBMS_OUTPUT.PUT_LINE(V_SQL_SEARCH);
+        OPEN C1 FOR V_SQL_SEARCH USING P_V1;
         
-        EXECUTE IMMEDIATE v_sql_insert USING v_id_collection, p_description, p_tags, p_vector;
-        COMMIT;
     EXCEPTION
         WHEN NO_DATA_FOUND THEN
-            DBMS_OUTPUT.PUT_LINE('Identificador no encontrado');
-    END;
-
-    PROCEDURE CREATE_COLLECTION(
-        P_NAME_COLLECTION IN VARCHAR2,
-        P_LEN_VECTOR IN NUMBER, 
-        P_SEARCH_METHOD IN VARCHAR2
-    ) IS
-        Q_INSERT_COLLECTION VARCHAR2(4000);
-    BEGIN
-        Q_INSERT_COLLECTION := '
-            INSERT INTO T_COLLECTION ( 
-                NAME_COLLECTION, 
-                LEN_VECTOR, 
-                SEARCH_METHOD ) 
-            VALUES ( :V1, :V2, :V3 )';
-        EXECUTE IMMEDIATE Q_INSERT_COLLECTION USING P_NAME_COLLECTION, P_LEN_VECTOR, P_SEARCH_METHOD;
-        COMMIT;
-    END;
+            DBMS_OUTPUT.PUT_LINE('ERRORES ENCONTRADOS');
+    END SEARCH_VECTOR;
     
-    PROCEDURE DELETE_COLLECTION (
-        p_name_collection IN VARCHAR2 
-    ) AS
-        v_sql_delete_data VARCHAR2(4000);
-        v_sql_delete_collection VARCHAR2(4000);
-    BEGIN
-        v_sql_delete_data := '
-        DELETE FROM T_DATA_VECTOR
-        WHERE ID_COLLECTION IN (
-            SELECT ID_COLLECTION
-            FROM T_COLLECTION
-            WHERE NAME_COLLECTION = :v1
-        )';
-        
-        v_sql_delete_collection := '
-        DELETE FROM T_COLLECTION
-        WHERE NAME_COLLECTION = :v1';
-        
-        EXECUTE IMMEDIATE v_sql_delete_data USING p_name_collection;
-        EXECUTE IMMEDIATE v_sql_delete_collection USING p_name_collection;
-        
-        COMMIT;
-        
-    EXCEPTION
-        WHEN OTHERS THEN
-            ROLLBACK;
-            DBMS_OUTPUT.PUT_LINE('Error: ' || SQLERRM);
-    END;
-    
-    PROCEDURE GET_COLLECTION_DETAILS (
-        P_NAME_COLLECTION IN VARCHAR2,
-        P_LEN_VECTOR OUT NUMBER,
-        P_SEARCH_METHOD OUT VARCHAR2,
-        P_CREATION_DATE OUT DATE
-    ) IS
-    
-    BEGIN
-        SELECT LEN_VECTOR, SEARCH_METHOD, CREATION_DATE
-        INTO P_LEN_VECTOR, P_SEARCH_METHOD, P_CREATION_DATE
-        FROM T_COLLECTION
-        WHERE NAME_COLLECTION = P_NAME_COLLECTION;
-    
-        EXCEPTION
-            WHEN NO_DATA_FOUND THEN
-                P_LEN_VECTOR := NULL;
-                P_SEARCH_METHOD := NULL;
-                P_CREATION_DATE := NULL;
-    END;
-
-    /* ____________________________________________________________________
-      |                 Manejo vectorial con Blob                          |
-      |____________________________________________________________________|
-    */
-    
-    -- Función distancia euclidiana Blob
-    FUNCTION EUCLIDIAN_DISTANCE_LOB( 
-        V1 BLOB, 
-        V2 BLOB, 
-        BASE_BYTES NUMBER:= 8
-    ) RETURN NUMBER
+    FUNCTION DOT_PRODUCT (
+        P_V1 IN V_BINARY_DOUBLE,
+        P_V2 IN V_BINARY_DOUBLE
+    ) RETURN BINARY_DOUBLE
     IS
-        BLOB_LEN_V1 NUMBER;
-        BLOB_LEN_V2 NUMBER;
-        
-        LEN_V1 NUMBER;
-        LEN_V2 NUMBER;
-        
-        BUFFER_V1   RAW(32767);
-        BUFFER_V2   RAW(32767);
-        
-        AMOUNT INTEGER := 32767;
-        OFFSET INTEGER := 1;
-        
-        DIST NUMBER :=0;
-        FRAGMENT_V1 BINARY_DOUBLE;
-        FRAGMENT_V2 BINARY_DOUBLE;
-        
+        V1_LEN BINARY_DOUBLE;
+        V2_LEN BINARY_DOUBLE;
+        DOT_PRODUCT_RESULT BINARY_DOUBLE := 0;
     BEGIN
+        V1_LEN := P_V1.COUNT;
+        V2_LEN := P_V2.COUNT;
         
-        BLOB_LEN_V1 := DBMS_LOB.GETLENGTH(V1);
-        BLOB_LEN_V2 := DBMS_LOB.GETLENGTH(V2);
-        
-        LEN_V1:= CEIL(BLOB_LEN_V1/BASE_BYTES);
-        LEN_V2:= CEIL(BLOB_LEN_V2/BASE_BYTES);
-        
-        IF LEN_V1 <> LEN_V2 THEN
-            RAISE_APPLICATION_ERROR(-20001, 'Los vectores deben tener la misma longitud.');
+        IF V1_LEN <> V2_LEN THEN
+            RAISE_APPLICATION_ERROR(-20001,'EL TAMAÑO DE LOS VECTORES NO COINCIDE. ACCION INTERRUMPIDA');
         END IF;
         
-        LOOP
-            EXIT WHEN OFFSET > BLOB_LEN_V1;
-    
-            DBMS_LOB.READ(V1, AMOUNT, OFFSET, BUFFER_V1);
-            DBMS_LOB.READ(V2, AMOUNT, OFFSET, BUFFER_V2);
-            
-            FOR I IN 0..LEN_V1 - 1 LOOP
-                FRAGMENT_V1:= UTL_RAW.CAST_TO_BINARY_DOUBLE(DBMS_LOB.SUBSTR(BUFFER_V1, BASE_BYTES, I * BASE_BYTES + 1));
-                FRAGMENT_V2:= UTL_RAW.CAST_TO_BINARY_DOUBLE(DBMS_LOB.SUBSTR(BUFFER_V2, BASE_BYTES, I * BASE_BYTES + 1));
-                
-                DIST := DIST + POWER(
-                    FRAGMENT_V1 - FRAGMENT_V2, 
-                    2);
-            END LOOP;
-            
-            OFFSET := OFFSET + AMOUNT;
+        FOR I IN 1..V1_LEN LOOP
+            DOT_PRODUCT_RESULT := DOT_PRODUCT_RESULT +( P_V1(I) * P_V2(I) );
         END LOOP;
+        RETURN DOT_PRODUCT_RESULT;
+    END DOT_PRODUCT;
+    
+    FUNCTION NORMA_VECTOR(
+        P_V IN V_BINARY_DOUBLE
+    ) RETURN BINARY_DOUBLE
+    IS
+        RESULT_NORMA BINARY_DOUBLE := 0;
+    BEGIN
+        
+        FOR I IN 1..P_V.COUNT LOOP
+            RESULT_NORMA := RESULT_NORMA + POWER(P_V(I),2);
+        END LOOP;
+        
+        RETURN SQRT(RESULT_NORMA);
+    END NORMA_VECTOR;
+        
+    FUNCTION COSINES_SIMILITARY (
+        P_V1 IN V_BINARY_DOUBLE,
+        P_V2 IN V_BINARY_DOUBLE
+    ) RETURN BINARY_DOUBLE
+    IS    
+        NORMA_V1 BINARY_DOUBLE;
+        NORMA_V2 BINARY_DOUBLE;
+        DOT_PRODUCT_V BINARY_DOUBLE;
+        
+    BEGIN
+        
+        DOT_PRODUCT_V := DOT_PRODUCT ( P_V1, P_V2 );
+        NORMA_V1:= NORMA_VECTOR(P_V1);
+        NORMA_V2:= NORMA_VECTOR(P_V2);
+        
+        IF NORMA_V1 = 0 OR NORMA_V2 = 0 THEN
+                RAISE_APPLICATION_ERROR(-20002, 'EXISTE ALGUNA NORMA CON VALOR CERO');
+        END IF;
+            
+        RETURN DOT_PRODUCT_V / (NORMA_V1 * NORMA_V2);
+    END COSINES_SIMILITARY;
+    
+    FUNCTION EUCLIDIAN_DISTANCE (
+        P_V1 V_BINARY_DOUBLE,
+        P_V2 V_BINARY_DOUBLE
+    ) RETURN BINARY_DOUBLE
+    IS
+        V1_LEN NUMBER;
+        V2_LEN NUMBER;
+        DIST BINARY_DOUBLE := 0;
+    BEGIN
+        V1_LEN := P_V1.COUNT;
+        V2_LEN := P_V2.COUNT;
+        
+        IF V1_LEN <> V2_LEN THEN
+            RAISE_APPLICATION_ERROR(-20001,'EL TAMAÑO DE LOS VECTORES NO COINCIDE. ACCION INTERRUMPIDA');
+        END IF;
+        
+        
+        FOR I IN 1..V1_LEN LOOP
+            DIST := DIST + POWER(P_V1(I) - P_V2(I), 2);
+            DBMS_OUTPUT.PUT_LINE(DIST);
+        END LOOP;
+        
         RETURN SQRT(DIST);
-    END;
+    END EUCLIDIAN_DISTANCE;
     
-    FUNCTION SIMILITARY_COSINES_LOB(
-        V1 BLOB, 
-        V2 BLOB, 
-        BASE_BYTES NUMBER:=8
-    ) RETURN NUMBER
-    IS
-        BLOB_LEN_V1 NUMBER;
-        BLOB_LEN_V2 NUMBER;
-        
-        LEN_V1 NUMBER;
-        LEN_V2 NUMBER;
-        
-        BUFFER_V1 RAW(32767);
-        BUFFER_V2  RAW(32767);
-        
-        AMOUNT INTEGER := 32767;
-        OFFSET INTEGER := 1;
-        
-        DOT_PRODUCT NUMBER :=0;
-        NORM_V1 NUMBER :=0;
-        NORM_V2 NUMBER :=0;
-        
-        FRAGMENT_V1 BINARY_DOUBLE;
-        FRAGMENT_V2 BINARY_DOUBLE;
-        
-    BEGIN
-        
-        BLOB_LEN_V1 := DBMS_LOB.GETLENGTH(V1);
-        BLOB_LEN_V2 := DBMS_LOB.GETLENGTH(V2);
-        
-        LEN_V1:= CEIL(BLOB_LEN_V1/BASE_BYTES);
-        LEN_V2:= CEIL(BLOB_LEN_V2/BASE_BYTES);
-        
-        IF LEN_V1 <> LEN_V2 THEN
-            RAISE_APPLICATION_ERROR(-20001, 'LOS VECTORES DEBEN TENER LA MISMA LONGITUD.');
-        END IF;
-        
-        LOOP
-            EXIT WHEN OFFSET > BLOB_LEN_V1;
-    
-            DBMS_LOB.READ(V1, AMOUNT, OFFSET, BUFFER_V1);
-            DBMS_LOB.READ(V2, AMOUNT, OFFSET, BUFFER_V2);
-            
-            FOR I IN 0..LEN_V1 - 1 LOOP
-                FRAGMENT_V1:= UTL_RAW.CAST_TO_BINARY_DOUBLE(DBMS_LOB.SUBSTR(BUFFER_V1, BASE_BYTES, I * BASE_BYTES + 1));
-                FRAGMENT_V2:= UTL_RAW.CAST_TO_BINARY_DOUBLE(DBMS_LOB.SUBSTR(BUFFER_V2, BASE_BYTES, I * BASE_BYTES + 1));
-                
-                DOT_PRODUCT := DOT_PRODUCT + (FRAGMENT_V1*FRAGMENT_V2);
-                NORM_V1 := NORM_V1 + POWER(FRAGMENT_V1,2);
-                NORM_V2 := NORM_V2 + POWER(FRAGMENT_V2,2);
-            END LOOP;
-            
-            OFFSET := OFFSET + AMOUNT;
-        END LOOP;
-        NORM_V1 := SQRT(NORM_V1);
-        NORM_V2 := SQRT(NORM_V2);
-        
-        IF NORM_V1 = 0 OR NORM_V2 = 0 THEN
-            RAISE_APPLICATION_ERROR(-20002, 'EXISTE ALGUNA NORMA CON VALOR CERO');
-        END IF;
-        RETURN DOT_PRODUCT / (NORM_V1*NORM_V2);
-    END;
-    
-    FUNCTION DOT_PRODUCT_LOB(
-        V1 BLOB, 
-        V2 BLOB, 
-        BASE_BYTES NUMBER:=8
-    ) RETURN NUMBER 
-    IS
-        BLOB_LEN_V1 NUMBER;
-        BLOB_LEN_V2 NUMBER;
-        
-        LEN_V1 NUMBER;
-        LEN_V2 NUMBER;
-        
-        BUFFER_V1 RAW(32767);
-        BUFFER_V2  RAW(32767);
-        
-        AMOUNT INTEGER := 32767;
-        OFFSET INTEGER := 1;
-        DOT_PRODUCT NUMBER;
-        
-        FRAGMENT_V1 BINARY_DOUBLE;
-        FRAGMENT_V2 BINARY_DOUBLE;
-    BEGIN
-        BLOB_LEN_V1 := DBMS_LOB.GETLENGTH(V1);
-        BLOB_LEN_V2 := DBMS_LOB.GETLENGTH(V2);
-        
-        LEN_V1:= CEIL(BLOB_LEN_V1/BASE_BYTES);
-        LEN_V2:= CEIL(BLOB_LEN_V2/BASE_BYTES);
-        
-        IF LEN_V1 <> LEN_V2 THEN
-            RAISE_APPLICATION_ERROR(-20001, 'LOS VECTORES DEBEN TENER LA MISMA LONGITUD.');
-        END IF;
-        
-        LOOP
-            EXIT WHEN OFFSET > BLOB_LEN_V1;
-    
-            DBMS_LOB.READ(V1, AMOUNT, OFFSET, BUFFER_V1);
-            DBMS_LOB.READ(V2, AMOUNT, OFFSET, BUFFER_V2);
-            
-            FOR I IN 0..LEN_V1 - 1 LOOP
-                FRAGMENT_V1:= UTL_RAW.CAST_TO_BINARY_DOUBLE(DBMS_LOB.SUBSTR(BUFFER_V1, BASE_BYTES, I * BASE_BYTES + 1));
-                FRAGMENT_V2:= UTL_RAW.CAST_TO_BINARY_DOUBLE(DBMS_LOB.SUBSTR(BUFFER_V2, BASE_BYTES, I * BASE_BYTES + 1));
-                
-                DOT_PRODUCT := DOT_PRODUCT + (FRAGMENT_V1*FRAGMENT_V2);
-            END LOOP;
-            
-            OFFSET := OFFSET + AMOUNT;
-        END LOOP;
-        RETURN DOT_PRODUCT;
-    END;
-    
-    /* ____________________________________________________________________
-      |                 Convertidor BLOB a LIST                            |
-      |____________________________________________________________________|
-    */
-    -- Función de conversion de datos
-    FUNCTION CONVERT_BLOB_TO_LIST ( 
-        V1 BLOB
-    ) RETURN T_BINARY_DOUBLE 
-    IS
-        RESULT      T_BINARY_DOUBLE := T_BINARY_DOUBLE();
-        BLOB_LEN_V1 NUMBER;
-        LEN_V1      NUMBER;
-        BUFFER_V1   RAW(32767);
-        AMOUNT      INTEGER := 32767;
-        OFFSET      INTEGER := 1;
-        BASE        NUMBER := 8;
-        FRAGMENT_V1 BINARY_DOUBLE;
-    BEGIN
-        BLOB_LEN_V1 := DBMS_LOB.GETLENGTH(V1);
-        LEN_V1 := CEIL(BLOB_LEN_V1 / BASE);
-        LOOP
-            EXIT WHEN OFFSET > BLOB_LEN_V1;
-            DBMS_LOB.READ(V1, AMOUNT, OFFSET, BUFFER_V1);
-            
-            FOR I IN 0..LEN_V1 - 1 LOOP
-                FRAGMENT_V1 := UTL_RAW.CAST_TO_BINARY_DOUBLE(DBMS_LOB.SUBSTR(BUFFER_V1, BASE, I * BASE + 1));
-
-                RESULT.EXTEND;
-                RESULT(RESULT.LAST) := FRAGMENT_V1;
-                
-            END LOOP;
-            OFFSET := OFFSET + AMOUNT;
-        END LOOP;
-
-        RETURN RESULT;
-    END;
-    
-    /* ____________________________________________________________________
-      |                 Manejo vectorial con LIST                          |
-      |____________________________________________________________________|
-    */
-    
-    FUNCTION EUCLIDIAN_DISTANCE_LIST (
-        V1 BLOB, 
-        V2 BLOB
-    ) RETURN NUMBER 
-    IS
-        DIST        NUMBER := 0;
-        FRAGMENT_V1 BINARY_DOUBLE;
-        FRAGMENT_V2 BINARY_DOUBLE;
-        LIST_V1     T_BINARY_DOUBLE := T_BINARY_DOUBLE();
-        LIST_V2     T_BINARY_DOUBLE := T_BINARY_DOUBLE();
-    BEGIN
-        LIST_V1 := CONVERT_BLOB_TO_LIST(V1);
-        LIST_V2 := CONVERT_BLOB_TO_LIST(V2);
-        IF LIST_V1.COUNT <> LIST_V2.COUNT THEN
-            RAISE_APPLICATION_ERROR(-20001, 'LOS VECTORES DEBEN TENER LA MISMA LONGITUD.');
-        END IF;
-    
-        FOR I IN 1..LIST_V1.COUNT LOOP
-            DIST := DIST + POWER(LIST_V1(I) - LIST_V2(I), 2);
-        END LOOP;
-    
-        RETURN SQRT(DIST);
-    END;
-    
-    FUNCTION DOT_PRODUCT_LIST(
-        V1 BLOB, 
-        V2 BLOB
-    ) RETURN NUMBER 
-    IS
-        LIST_V1     T_BINARY_DOUBLE := T_BINARY_DOUBLE();
-        LIST_V2     T_BINARY_DOUBLE := T_BINARY_DOUBLE();
-        DOT_PRODUCT NUMBER := 0;
-    BEGIN
-        LIST_V1 := CONVERT_BLOB_TO_LIST(V1);
-        LIST_V2 := CONVERT_BLOB_TO_LIST(V2);
-        
-        FOR I IN 1..LIST_V1.COUNT LOOP
-            DOT_PRODUCT := DOT_PRODUCT + ( LIST_V1(I) * LIST_V2(I) );
-        END LOOP;
-        RETURN DOT_PRODUCT;
-    END;
-
-    FUNCTION SIMILITARY_COSINES_LIST (
-        V1 BLOB, 
-        V2 BLOB
-    ) RETURN NUMBER 
-    IS
-        DOT_PRODUCT NUMBER := 0;
-        NORM_V1     NUMBER := 0;
-        NORM_V2     NUMBER := 0;
-        LIST_V1     T_BINARY_DOUBLE := T_BINARY_DOUBLE();
-        LIST_V2     T_BINARY_DOUBLE := T_BINARY_DOUBLE();
-    BEGIN
-        LIST_V1 := CONVERT_BLOB_TO_LIST(V1);
-        LIST_V2 := CONVERT_BLOB_TO_LIST(V2);
-        
-        IF LIST_V1.COUNT <> LIST_V2.COUNT THEN
-            RAISE_APPLICATION_ERROR(-20001, 'LOS VECTORES DEBEN TENER LA MISMA LONGITUD.');
-        END IF;
-    
-        FOR I IN 1..LIST_V1.COUNT LOOP
-            DOT_PRODUCT := DOT_PRODUCT + ( LIST_V1(I) * LIST_V2(I) );
-            NORM_V1 := NORM_V1 + POWER(LIST_V1(I), 2);
-            NORM_V2 := NORM_V2 + POWER(LIST_V2(I), 2);
-        END LOOP;
-        
-        NORM_V1 := SQRT(NORM_V1);
-        NORM_V2 := SQRT(NORM_V2);
-        
-        IF NORM_V1 = 0 OR NORM_V2 = 0 THEN
-            RAISE_APPLICATION_ERROR(-20002, 'EXISTE ALGUNA NORMA CON VALOR CERO');
-        END IF;
-    
-        RETURN ( DOT_PRODUCT / ( NORM_V1 * NORM_V2 ) );
-    END;
-
 END DBVECTORIAL;

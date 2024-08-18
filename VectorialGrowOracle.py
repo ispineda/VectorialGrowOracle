@@ -11,9 +11,9 @@ class VectorialGrowOracle:
         self.sid = sid
         self.user = user
         self.connection_available = False
-        self.path_create = 'CREATE.sql'
-        self.path_delete = 'DELETE.sql'
-        self.path_package = 'PACKAGE.sql'
+        self.path_create    = 'CREATE.sql'
+        self.path_delete    = 'DELETE.sql'
+        self.path_package   = 'PACKAGE.sql'
 
         try:
             self.dsn = cx_Oracle.makedsn(self.host, self.port, self.sid)
@@ -36,10 +36,10 @@ class VectorialGrowOracle:
         
         sql_commands = sql_script.split('/--split')
         for i, command in enumerate(sql_commands):
-            command = command.strip()            
+            command = command.strip()
             self.cursor.execute(command)
+            self.connection.commit()
         
-        self.connection.commit()
     
     def delete_all(self):
         self.sql_run_path(self.path_delete)
@@ -53,98 +53,9 @@ class VectorialGrowOracle:
         conexión disponible: {self.connection_available}
         ''')
         return (self.host,self.port,self.sid, self.user)
-    
-    def get_collection_details(self, name):
-        
-        self.name_collection = name
-
-        len_vector = self.cursor.var(cx_Oracle.NUMBER)
-        search_method = self.cursor.var(cx_Oracle.STRING)
-        creation_date = self.cursor.var(cx_Oracle.DB_TYPE_DATE)
-        
-        # Llamar al procedimiento
-        self.cursor.callproc('DBVECTORIAL.GET_COLLECTION_DETAILS', [
-            self.name_collection,
-            len_vector,
-            search_method,
-            creation_date
-        ])
-
-        if len_vector.getvalue() == None and search_method.getvalue() == None and creation_date.getvalue() == None:
-            return None
-
-        print(f'''
-        name_collection: {self.name_collection},
-        len_vector: {len_vector.getvalue()},
-        search_method: {search_method.getvalue()},
-        creation_date: {creation_date.getvalue()}
-        ''')
-
-        return {
-                'name_collection': self.name_collection,
-                'len_vector': len_vector.getvalue(),
-                'search_method': search_method.getvalue(),
-                'creation_date': creation_date.getvalue()
-            }
-    
-    def delete_collection(self, name_collection):
-        self.cursor.callproc('DBVECTORIAL.DELETE_COLLECTION', [name_collection])
-        print('Colección eliminada')
-
-    def create_collection(self, name_collection, len_vector, method):
-    
-        if self.get_collection_details(name_collection) is None:
-            try:
-                
-                # Llamar al procedimiento
-                self.cursor.callproc('DBVECTORIAL.CREATE_COLLECTION', [
-                    name_collection,
-                    len_vector,
-                    method
-                ])
-
-                print('Colección insertada exitosamente')
-
-            except cx_Oracle.DatabaseError as e:
-                error, = e.args
-                print(f'Error de base de datos: {error.message}')
-            
-            except Exception as e:
-                print(f'Error inesperado: {e}')
-        else:
-            print('Ya existe la colección')
-        
-        self.get_collection_details(name_collection)
-            
+      
     def end_connection(self):
         self.connection.commit()
         self.cursor.close()
         self.connection.close()
 
-    def add_vector(self, name_collection, tags, description, vector):
-
-        if not self.get_collection_details(name_collection) is None:
-            
-            tags_str = np.array2string(tags, separator=',')
-
-            tags_clob = self.cursor.var(cx_Oracle.CLOB)
-            tags_clob.setvalue(0,tags_str)
-
-            description_clob = self.cursor.var(cx_Oracle.CLOB)
-            description_clob.setvalue(0,description)
-
-            vector_bytes = vector.byteswap().tobytes()
-
-            vector_blob = self.cursor.var(cx_Oracle.BLOB)
-            vector_blob.setvalue(0,vector_bytes)
-
-            self.cursor.callproc('DBVECTORIAL.SAVE_VECTOR', [
-                        name_collection,
-                        description_clob,
-                        tags_clob,
-                        vector_blob
-                    ])
-        else:
-            print('No se cuenta con una coleccion con dicho nombre')
-    
-    
